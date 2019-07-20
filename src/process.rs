@@ -1,7 +1,7 @@
 use failure::{Error, Fail};
 use libc;
 use std::collections::HashSet;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -110,7 +110,11 @@ impl Process {
                 let mut comm = String::new();
                 f.read_to_string(&mut comm)?;
 
-                Ok(comm)
+                comm = comm.trim().into();
+
+                let v: Vec<&str> = comm.split("\u{0}").collect();
+
+                Ok(v[0].to_owned())
             }
 
             Err(e) => Err(ProcessError::ReadError(e).into()),
@@ -156,6 +160,10 @@ fn is_section_mapping<T: AsRef<Path>>(mapping: T) -> bool {
     }
 
     if mapping.contains("(deleted)") {
+        return true;
+    }
+
+    if mapping.trim().len() < 1 {
         return true;
     }
 

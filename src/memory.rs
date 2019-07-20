@@ -6,6 +6,9 @@ use std::os::unix::io::IntoRawFd;
 use std::path::PathBuf;
 use std::ptr;
 
+use crate::util;
+use crate::Options;
+
 const MAX_READAHEAD: usize = 10 * 1024 * 1024;
 
 pub fn prime_dentry_cache(m: &[PathBuf]) {
@@ -68,7 +71,8 @@ pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
                     }
                 }
 
-                let result = unsafe { libc::madvise(addr, stat.st_size as usize, libc::MADV_WILLNEED) };
+                let result =
+                    unsafe { libc::madvise(addr, stat.st_size as usize, libc::MADV_WILLNEED) };
                 if result != 0 {
                     unsafe {
                         libc::perror(ffi::CString::new("madvise").unwrap().as_ptr());
@@ -83,9 +87,11 @@ pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
     Ok(())
 }
 
-pub fn mlock_file_mappings(m: &[PathBuf]) -> io::Result<()> {
+pub fn mlock_file_mappings(m: &[PathBuf], opts: &Options) -> io::Result<()> {
     for mapping in m.iter() {
-        println!("{}", mapping.display());
+        if opts.verbosity > 1 {
+            println!("{}", mapping.display());
+        }
 
         match File::open(&mapping) {
             Ok(f) => {
@@ -137,7 +143,7 @@ pub fn mlock_file_mappings(m: &[PathBuf]) -> io::Result<()> {
     Ok(())
 }
 
-pub fn fincore(m: &[PathBuf]) -> io::Result<()> {
+pub fn print_fincore(m: &[PathBuf]) -> io::Result<()> {
     for mapping in m.iter() {
         match File::open(&mapping) {
             Ok(f) => {
@@ -168,13 +174,16 @@ pub fn fincore(m: &[PathBuf]) -> io::Result<()> {
                 }
 
                 let mut pages = Vec::with_capacity(((stat.st_size + 4096) / 4096) as usize);
-                let result = unsafe { libc::mincore(addr, stat.st_size as usize, pages.as_mut_ptr()) };
+                let result =
+                    unsafe { libc::mincore(addr, stat.st_size as usize, pages.as_mut_ptr()) };
                 if result != 0 {
                     unsafe {
                         libc::perror(ffi::CString::new("mincore").unwrap().as_ptr());
                     }
                 } else {
-                    unsafe { pages.set_len(((stat.st_size + 4096) / 4096) as usize); }
+                    unsafe {
+                        pages.set_len(((stat.st_size + 4096) / 4096) as usize);
+                    }
                 }
 
                 let result = unsafe { libc::munmap(addr, stat.st_size as usize) };
@@ -186,11 +195,19 @@ pub fn fincore(m: &[PathBuf]) -> io::Result<()> {
 
                 let mut page_cnt = 0;
                 for page in pages.iter() {
-                    if page & 0x1 != 0 { page_cnt += 1; }
+                    if page & 0x1 != 0 {
+                        page_cnt += 1;
+                    }
                 }
 
                 let fincore_percentage = (page_cnt * 100) / ((stat.st_size + 4096) / 4096);
-                println!("{:3}% {:5} {} ({} KiB)", fincore_percentage, page_cnt, mapping.display(), stat.st_size);
+                println!(
+                    "{:3}% {:5} {} ({})",
+                    fincore_percentage,
+                    page_cnt,
+                    mapping.display(),
+                    util::format_filesize(stat.st_size as u64),
+                );
             }
 
             Err(e) => println!("{}: {}", mapping.display(), e),

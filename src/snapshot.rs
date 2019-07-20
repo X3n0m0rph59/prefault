@@ -1,4 +1,4 @@
-use failure::Error;
+use failure::{Error, Fail};
 use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -8,7 +8,17 @@ use std::path::PathBuf;
 use crate::process::*;
 use crate::util::*;
 
+#[derive(Fail, Debug)]
+pub enum SnapshotError {
+    #[fail(
+        display = "Invalid snapshot file format or unsupported version: {}",
+        _0
+    )]
+    FormatError(String),
+}
+
 pub struct Snapshot {
+    pub enabled: bool,
     pub command: String,
     pub mappings: HashSet<PathBuf>,
 }
@@ -18,14 +28,37 @@ impl Snapshot {
         let command = proc.get_command()?;
         let mappings = proc.get_mapped_files();
 
-        Ok(Snapshot { command, mappings })
+        Ok(Snapshot {
+            enabled: true,
+            command,
+            mappings,
+        })
     }
 
     pub fn new_from_file<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
-        let mut file = BufReader::new(fs::File::open(path)?);
+        let mut file = BufReader::new(fs::File::open(path.as_ref())?);
+
+        let mut header = String::new();
+        file.read_line(&mut header)?;
+
+        if header.trim() != "prefault snapshot: 1.0" {
+            return Err(SnapshotError::FormatError(path.as_ref().to_string_lossy().into()).into());
+        }
+
+        let mut enabled_line = String::new();
+        file.read_line(&mut enabled_line)?;
+
+        let enabled;
+        if enabled_line.contains("false") {
+            enabled = false
+        } else {
+            enabled = true
+        }
 
         let mut command = String::new();
         file.read_line(&mut command)?;
+
+        command = command.trim().to_string();
 
         let mut mappings = HashSet::new();
 
@@ -34,13 +67,21 @@ impl Snapshot {
             mappings.insert(value);
         }
 
-        Ok(Snapshot { command, mappings })
+        Ok(Snapshot {
+            enabled,
+            command,
+            mappings,
+        })
     }
 
-    pub fn save_to_file(&self) -> Result<PathBuf, Error> {
+    pub fn save_to_file<P: AsRef<Path>>(&self, snapshot_dir: P) -> Result<PathBuf, Error> {
         let path = PathBuf::from(format!("{}.snapshot", hash_string(&self.command)));
+        let path = snapshot_dir.as_ref().join(path);
+
         let mut file = BufWriter::new(fs::File::create(path.clone())?);
 
+        writeln!(file, "prefault snapshot: 1.0")?;
+        writeln!(file, "enabled: {}", self.enabled)?;
         writeln!(file, "{}", self.command)?;
 
         for mapping in self.mappings.iter() {
@@ -51,6 +92,16 @@ impl Snapshot {
             )?;
         }
 
+        println!("Wrote {}", &path.display());
+
         Ok(path)
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    pub fn get_hash(&self) -> u64 {
+        hash_string(&self.command)
     }
 }

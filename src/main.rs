@@ -3,13 +3,15 @@ use ctrlc;
 use failure::{Error, Fail};
 use lazy_static::lazy_static;
 use libc;
+use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::u64;
 use structopt::StructOpt;
+use walkdir;
 
 mod memory;
 mod process;
@@ -27,7 +29,7 @@ lazy_static! {
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Pre-fault and optionally lock files into the kernel's page cache")]
-struct Options {
+pub struct Options {
     #[structopt(short = "c", help = "Specify a userfault configuration file")]
     config_file: Option<PathBuf>,
 
@@ -50,22 +52,19 @@ enum Command {
         filter: Option<String>,
     },
 
-    #[structopt(name = "enable", about = "Enable loading of a process snapshot")]
+    #[structopt(name = "enable", about = "Enable loading of process snapshots")]
     Enable {
         #[structopt(short = "f")]
         filter: Option<String>,
     },
 
-    #[structopt(name = "disable", about = "Disable loading of a process snapshot")]
+    #[structopt(name = "disable", about = "Disable loading of process snapshots")]
     Disable {
         #[structopt(short = "f")]
         filter: Option<String>,
     },
 
-    #[structopt(
-        name = "show",
-        about = "Show information about a process snapshot"
-    )]
+    #[structopt(name = "show", about = "Show information about process snapshots")]
     Show {
         #[structopt(short = "f")]
         filter: Option<String>,
@@ -86,7 +85,7 @@ enum Command {
 
     #[structopt(
         name = "incore",
-        about = "Show which files of a process snapshot are resident in the page cache",
+        about = "Show which files of a process snapshot are resident in the page cache"
     )]
     Incore {
         #[structopt(short = "f")]
@@ -130,9 +129,8 @@ enum CommandError {
     #[fail(display = "Invalid command parameters: {}", _0)]
     InvalidParamaters(String),
 
-    #[fail(display = "Invalid filter expression")]
-    InvalidFilter,
-
+    // #[fail(display = "Invalid filter expression")]
+    // InvalidFilter,
     #[fail(display = "Error during command execution: {}", _0)]
     ExecutionError(#[fail(cause)] Error),
 
@@ -140,44 +138,123 @@ enum CommandError {
     Process { msg: String },
 }
 
-fn do_snapshot<T: AsRef<str>>(
+fn do_list<T: AsRef<str>, P: AsRef<Path>>(
     filter: Option<T>,
-    pid: Option<libc::pid_t>,
-) -> Result<Vec<PathBuf>, CommandError> {
-    let mut result = vec![];
+    snapshot_dir: P,
+    opts: &Options,
+) -> Result<(), Error> {
+    println!("{}:", snapshot_dir.as_ref().display());
 
-    if filter.is_none() && pid.is_none() {
-        return Err(CommandError::InvalidParamaters(
-            "Neither filter nor pid specified".into(),
-        ));
-    }
-
-    match Process::new(pid.unwrap()) {
-        Ok(proc) => match Snapshot::new_from_process(&proc) {
-            Ok(snapshot) => {
-                let path = snapshot
-                    .save_to_file()
-                    .map_err(|e| CommandError::ExecutionError(e.into()))?;
-
-                result.push(path);
-            }
-
-            Err(e) => return Err(CommandError::ExecutionError(e)),
-        },
-
-        Err(e) => {
-            return Err(CommandError::Process {
-                msg: format!("{}", e),
-            })
+    for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir() || !match_filter(filter.as_ref(), &p.path(), &opts) {
+            continue;
         }
+
+        let snapshot =
+            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+
+        let mut total_size = 0;
+        for mapping in snapshot.mappings.iter() {
+            match fs::metadata(&mapping) {
+                Ok(metadata) => {
+                    let size = metadata.len();
+                    total_size += size;
+                }
+
+                Err(e) => eprintln!("{}: {}", &mapping.display(), e),
+            }
+        }
+
+        println!(
+            "{} {} ({} files, {})",
+            snapshot.get_hash(),
+            &snapshot.command,
+            snapshot.mappings.len(),
+            util::format_filesize(total_size)
+        );
     }
 
-    Ok(result)
+    Ok(())
 }
 
-fn do_mincore<T: AsRef<str>>(
+fn do_set_state<T: AsRef<str>, P: AsRef<Path>>(
+    filter: Option<T>,
+    snapshot_dir: P,
+    enable: bool,
+    opts: &Options,
+) -> Result<(), Error> {
+    println!("{}:", snapshot_dir.as_ref().display());
+
+    for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir() || !match_filter(filter.as_ref(), &p.path(), &opts) {
+            continue;
+        }
+
+        let mut snapshot =
+            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+
+        snapshot.set_enabled(enable);
+        snapshot.save_to_file(snapshot_dir.as_ref())?;
+
+        println!(
+            "{} ({} files) - Enabled: {}",
+            snapshot.command,
+            snapshot.mappings.len(),
+            enable
+        );
+    }
+
+    Ok(())
+}
+
+fn do_show<T: AsRef<str>, P: AsRef<Path>>(
+    filter: Option<T>,
+    snapshot_dir: P,
+    opts: &Options,
+) -> Result<(), Error> {
+    for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir() || !match_filter(filter.as_ref(), &p.path(), &opts) {
+            continue;
+        }
+
+        let snapshot =
+            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+
+        println!(
+            "{} ({} files) - Enabled: {}",
+            snapshot.command,
+            snapshot.mappings.len(),
+            snapshot.enabled
+        );
+
+        let mut total_size = 0;
+        for mapping in snapshot.mappings {
+            match fs::metadata(&mapping) {
+                Ok(metadata) => {
+                    let size = metadata.len();
+                    total_size += size;
+
+                    println!("\t{} ({})", &mapping.display(), util::format_filesize(size));
+                }
+
+                Err(e) => eprintln!("{}: {}", &mapping.display(), e),
+            }
+        }
+
+        println!("Total: {}", util::format_filesize(total_size));
+    }
+
+    Ok(())
+}
+
+fn do_snapshot<T: AsRef<str>, P: AsRef<Path>>(
     filter: Option<T>,
     pid: Option<libc::pid_t>,
+    snapshot_dir: P,
+    _opts: &Options,
 ) -> Result<(), CommandError> {
     if filter.is_none() && pid.is_none() {
         return Err(CommandError::InvalidParamaters(
@@ -188,8 +265,9 @@ fn do_mincore<T: AsRef<str>>(
     match Process::new(pid.unwrap()) {
         Ok(proc) => match Snapshot::new_from_process(&proc) {
             Ok(snapshot) => {
-                let paths: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
-                memory::fincore(&paths).map_err(|e| CommandError::ExecutionError(e.into()))?;
+                snapshot
+                    .save_to_file(snapshot_dir.as_ref())
+                    .map_err(|e| CommandError::ExecutionError(e.into()))?;
             }
 
             Err(e) => return Err(CommandError::ExecutionError(e)),
@@ -205,35 +283,165 @@ fn do_mincore<T: AsRef<str>>(
     Ok(())
 }
 
-fn do_cache<T: AsRef<str>>(_filter: Option<T>) -> Result<(), CommandError> {
+fn do_incore<T: AsRef<str>>(
+    filter: Option<T>,
+    pid: Option<libc::pid_t>,
+    _opts: &Options,
+) -> Result<(), Error> {
+    if filter.is_none() && pid.is_none() {
+        return Err(
+            CommandError::InvalidParamaters("Neither filter nor pid specified".into()).into(),
+        );
+    }
+
+    match Process::new(pid.unwrap()) {
+        Ok(proc) => {
+            println!("{} mappings:", proc.get_command()?);
+            match Snapshot::new_from_process(&proc) {
+                Ok(snapshot) => {
+                    let paths: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
+                    memory::print_fincore(&paths)
+                        .map_err(|e| CommandError::ExecutionError(e.into()))?;
+                }
+
+                Err(e) => return Err(CommandError::ExecutionError(e).into()),
+            }
+        }
+
+        Err(e) => {
+            return Err(CommandError::Process {
+                msg: format!("{}", e),
+            }
+            .into())
+        }
+    }
+
+    Ok(())
+}
+
+fn do_cache<T: AsRef<str>, P: AsRef<Path>>(
+    filter: Option<T>,
+    snapshot_dir: P,
+    opts: &Options,
+) -> Result<(), Error> {
     // Err(CommandError::InvalidFilter)
 
-    let p = PathBuf::from("123.snapshot");
-    let snapshot = Snapshot::new_from_file(p).map_err(|e| CommandError::ExecutionError(e))?;
+    for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir() || !match_filter(filter.as_ref(), &p.path(), &opts) {
+            continue;
+        }
 
-    let files: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
+        let snapshot =
+            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
 
-    memory::prime_dentry_cache(&files);
-    memory::prefault_file_mappings(&files).map_err(|e| CommandError::ExecutionError(e.into()))?;
+        if snapshot.enabled {
+            if opts.verbosity > 0 {
+                println!("{}", snapshot.command);
+            }
+
+            let files: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
+
+            memory::prime_dentry_cache(&files);
+            memory::prefault_file_mappings(&files)
+                .map_err(|e| CommandError::ExecutionError(e.into()))?;
+        }
+    }
 
     Ok(())
 }
 
 fn do_mlock<T: AsRef<str>, P: AsRef<Path>>(
-    _filter: Option<T>,
+    filter: Option<T>,
     snapshot_dir: P,
-) -> Result<(), CommandError> {
+    opts: &Options,
+) -> Result<(), Error> {
     // Err(CommandError::InvalidFilter)
 
-    let p = PathBuf::from("123.snapshot");
-    let snapshot = Snapshot::new_from_file(p).map_err(|e| CommandError::ExecutionError(e))?;
+    for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir() || !match_filter(filter.as_ref(), &p.path(), &opts) {
+            continue;
+        }
 
-    let files: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
+        let snapshot =
+            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
 
-    memory::prime_dentry_cache(&files);
-    memory::mlock_file_mappings(&files).map_err(|e| CommandError::ExecutionError(e.into()))?;
+        if snapshot.enabled {
+            if opts.verbosity > 0 {
+                println!("{}", snapshot.command);
+            }
+
+            let files: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
+
+            // memory::prime_dentry_cache(&files);
+            memory::mlock_file_mappings(&files, opts)
+                .map_err(|e| CommandError::ExecutionError(e.into()))?;
+        }
+    }
 
     Ok(())
+}
+
+fn match_filter<T: AsRef<str>, P: AsRef<Path>>(
+    filter: Option<T>,
+    snapshot: P,
+    _opts: &Options,
+) -> bool {
+    // no filter matches all
+    if filter.is_none() {
+        return true;
+    }
+
+    let filter = filter.unwrap();
+    let params: Vec<&str> = filter.as_ref().split("=").collect();
+
+    if params.len() != 2 {
+        panic!("WARNING: Invalid filter syntax: '{}'", &filter.as_ref());
+        // return false;
+    }
+
+    if params[0].starts_with("comm") {
+        match snapshot::Snapshot::new_from_file(snapshot.as_ref()) {
+            Ok(snapshot) => {
+                // TODO: Add support for regex
+                if snapshot.command.contains(params[1].trim()) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+            Err(e) => {
+                eprintln!("WARNING: Error matching filter: {}", e);
+                return false;
+            }
+        }
+    } else if params[0].starts_with("hash") {
+        match snapshot::Snapshot::new_from_file(snapshot.as_ref()) {
+            Ok(snapshot) => match params[1].parse::<u64>() {
+                Ok(hash) => {
+                    if snapshot.get_hash() == hash {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+
+                Err(e) => {
+                    panic!("Invalid hash value specified: {}", e);
+                    // return false;
+                }
+            },
+
+            Err(e) => {
+                eprintln!("WARNING: Error matching filter: {}", e);
+                return false;
+            }
+        }
+    } else {
+        return false;
+    }
 }
 
 fn main() {
@@ -249,63 +457,69 @@ fn main() {
     if opts.config_file.is_some() {
         settings
             .merge(config::File::new(
-                opts.config_file.unwrap().to_str().unwrap(),
+                opts.config_file.clone().unwrap().to_str().unwrap(),
                 config::FileFormat::Toml,
             ))
             .expect("Could not read configuration file");
     }
 
-    let snapshot_dir = settings
+    let home_dir =
+        PathBuf::from(env::var("HOME").expect("Could not get value of HOME environment variable"));
+    let mut snapshot_dir = settings
         .get::<PathBuf>("snapshot_dir")
         .unwrap_or_else(|_| PathBuf::from("~/.local/share/prefault/snapshots"));
 
+    if snapshot_dir.starts_with("~/") {
+        snapshot_dir = home_dir.join(
+            snapshot_dir
+                .strip_prefix(Path::new("~/"))
+                .expect("Error building snapshot_dir"),
+        )
+    }
+
+    // println!("{}", &snapshot_dir.display());
+    fs::create_dir_all(&snapshot_dir).expect("Error creating snapshot directory");
+
     match opts.cmd {
-        Command::List { filter: _ } => {
-            println!("Listing");
+        Command::List { ref filter } => {
+            do_list(filter.as_ref(), snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Enable { filter: _ } => {
-            println!("Enable");
+        Command::Enable { ref filter } => do_set_state(filter.as_ref(), snapshot_dir, true, &opts)
+            .unwrap_or_else(|e| eprintln!("{}", e)),
+
+        Command::Disable { ref filter } => {
+            do_set_state(filter.as_ref(), snapshot_dir, false, &opts)
+                .unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Disable { filter: _ } => {
-            println!("Disable");
+        Command::Show { ref filter } => {
+            do_show(filter.as_ref(), snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Show { filter: _ } => {
-            println!("Show");
+        Command::Snapshot { ref filter, pid } => {
+            do_snapshot(filter.as_ref(), pid, snapshot_dir, &opts)
+                .unwrap_or_else(|e| eprintln!("{}", e));
         }
 
-        Command::Snapshot { filter, pid } => match do_snapshot(filter, pid) {
-            Ok(result) => {
-                let result: Vec<String> =
-                    result.iter().map(|p| format!("{}", p.display())).collect();
-                println!("Success: {:?}", &result);
-            }
-
-            Err(e) => eprintln!("{}", e),
-        },
-
-        Command::Incore { filter, pid } => match do_mincore(filter, pid) {
-            Ok(_) => println!("Success"),
-            Err(e) => eprintln!("{}", e),
-        },
+        Command::Incore { ref filter, pid } => {
+            do_incore(filter.as_ref(), pid, &opts).unwrap_or_else(|e| eprintln!("{}", e))
+        }
 
         Command::Trace { command: _ } => {
-            println!("Trace is currently not implemented");
+            println!("Trace subcommand is currently not implemented");
         }
 
         Command::Remove { filter: _ } => {
-            println!("Remove is currently not implemented");
+            println!("Remove subcommand is currently not implemented");
         }
 
-        Command::Cache { filter } => match do_cache(filter) {
-            Ok(_) => println!("Success"),
-            Err(e) => eprintln!("{}", e),
-        },
+        Command::Cache { ref filter } => {
+            do_cache(filter.as_ref(), &snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
+        }
 
-        Command::Mlock { filter } => {
-            do_mlock(filter, snapshot_dir).unwrap_or_else(|e| eprintln!("{}", e));
+        Command::Mlock { ref filter } => {
+            do_mlock(filter.as_ref(), &snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e));
 
             println!("Going to sleep now");
 
@@ -314,7 +528,7 @@ fn main() {
 
                 if !RUNNING.load(Ordering::SeqCst) {
                     break;
-                } 
+                }
             }
 
             println!("Exiting");
