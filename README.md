@@ -1,6 +1,6 @@
 # prefault Project
 
-A leightweight tool to pre-fault pages from often used files, ahead of time.
+A leightweight tool used to pre-fault pages from often used files into memory, ahead of time.
 Supports locking of core libraries into memory to avoid eviction of important pages, which may cause a laggy user experience.
 
 ## Advantages over `precached`
