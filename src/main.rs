@@ -50,7 +50,7 @@ lazy_static! {
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Pre-fault and optionally lock files into the kernel's page cache")]
 pub struct Options {
-    #[structopt(short = "c", help = "Specify a userfault configuration file")]
+    #[structopt(short = "c", help = "Specify a configuration file")]
     config_file: Option<PathBuf>,
 
     #[structopt(
