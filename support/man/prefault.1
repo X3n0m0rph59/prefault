@@ -1,0 +1,80 @@
+.\" Man page for prefault
+.TH "prefault" "1" "25. Jul 2019" "X3n0m0rph59" "prefault documentation"
+.SH "NAME  "
+prefault
+.SH "SYNOPSIS  "
+prefault [FLAGS] [OPTIONS] \fI<SUBCOMMAND>\fR
+
+.SH "FLAGS  "
+.TP
+-h, --help       Prints help information
+.TP
+-V, --version    Prints version information
+.TP
+-v               Specify verbosity of log output
+
+.SH "OPTIONS  "
+.TP
+-c \fI<config_file>\fR Specify a configuration file
+
+.SH "DESCRIPTION  "
+Pre-fault and optionally lock files into the kernel's page cache to improve 
+application startup times and reduce desktop lagging.
+.SH "SUBCOMMANDS  "
+.SS
+\fBcache\fR       Fault in files from process snapshots
+
+        Note: This does not call mlock(2), it just primes the page cache. Cached files may be evicted from the page cache when there is enough memory pressure.
+
+.SS
+\fBdisable\fR     Disable loading of process snapshots
+
+        Marks snapshots matching the filter as disabled.
+
+.SS
+\fBenable\fR      Enable loading of process snapshots
+
+        Marks snapshots matching the filter as enabled.
+
+.SS
+\fBhelp\fR        Prints this message or the help of the given subcommand(s)
+        
+        Prints usage information.
+
+.SS
+\fBincore\fR      Show which files of a process snapshot are resident in the page cache
+
+        Prints a listing of mapped files, and associated memory residency information.
+
+.SS
+\fBlist\fR        List process snapshots
+
+        List available process snapshots.
+
+.SS
+\fBmlock\fR       Lock files from process snapshots into memory
+
+        Only works if the current rlimit settings allow the calling user to mlock large amounts of memory.
+
+.SS
+\fBremove\fR      Remove a process snapshot
+
+        Remove a process snapshot file.
+
+.SS
+\fBshow\fR        Show information about process snapshots
+        
+        May be used to dump a listing of files in a process snapshot.
+
+.SS
+\fBsnapshot\fR    Take snapshots of running processes
+        
+        Records a list of mapped files for later prefaulting.
+
+.SS
+\fBtrace\fR       Trace a process and record accessed files
+
+        This is currently not implemented.
+
+.SH "BUGS  "
+Currently no known bugs.
