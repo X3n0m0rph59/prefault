@@ -24,6 +24,7 @@ use failure::{Error, Fail};
 use lazy_static::lazy_static;
 use libc;
 use std::env;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -285,9 +286,11 @@ fn do_snapshot<T: AsRef<str>, P: AsRef<Path>>(
     match Process::new(pid.unwrap()) {
         Ok(proc) => match Snapshot::new_from_process(&proc) {
             Ok(snapshot) => {
-                snapshot
+                let path = snapshot
                     .save_to_file(snapshot_dir.as_ref())
                     .map_err(|e| CommandError::ExecutionError(e.into()))?;
+
+                println!("Wrote {}", &path.display());
             }
 
             Err(e) => return Err(CommandError::ExecutionError(e)),
@@ -333,6 +336,28 @@ fn do_incore<T: AsRef<str>>(
                 msg: format!("{}", e),
             }
             .into())
+        }
+    }
+
+    Ok(())
+}
+
+fn do_remove<T: AsRef<str>, P: AsRef<Path>>(
+    filter: Option<T>,
+    snapshot_dir: P,
+    opts: &Options,
+) -> Result<(), Error> {
+    // Err(CommandError::InvalidFilter)
+
+    for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir() || !match_filter(filter.as_ref(), &p.path(), &opts) {
+            continue;
+        }
+
+        if p.path().extension().unwrap_or_else(|| OsStr::new("")) == "snapshot" {
+            println!("Removing {}", p.path().display());
+            fs::remove_file(p.path()).map_err(|e| CommandError::ExecutionError(e.into()))?;
         }
     }
 
@@ -530,8 +555,8 @@ fn main() {
             println!("Trace subcommand is currently not implemented");
         }
 
-        Command::Remove { filter: _ } => {
-            println!("Remove subcommand is currently not implemented");
+        Command::Remove { ref filter } => {
+            do_remove(filter.as_ref(), snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
         }
 
         Command::Cache { ref filter } => {

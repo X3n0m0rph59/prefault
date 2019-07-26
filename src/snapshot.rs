@@ -112,8 +112,6 @@ impl Snapshot {
             )?;
         }
 
-        println!("Wrote {}", &path.display());
-
         Ok(path)
     }
 
