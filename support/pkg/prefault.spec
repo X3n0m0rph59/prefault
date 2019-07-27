@@ -24,7 +24,7 @@ Conflicts: prefault
 A leightweight tool used to pre-fault pages from often used files into memory, ahead of time.
 
 %prep
-%autosetup -n %{OrigName}-%{version}
+%autosetup -n %{OrigName}-master
 
 %build
 cargo build --all --release --verbose
