@@ -39,9 +39,9 @@ cargo build --all --release --verbose
 #%{__mkdir_p} %{buildroot}%{_datarootdir}/bash-completion/completions/
 #%{__mkdir_p} %{buildroot}%{_datarootdir}/zsh/site-functions/
 install -Dp -m 0755 %{_builddir}/%{OrigName}-master/target/release/prefault %{buildroot}%{_bindir}/prefault
-cp -a %{_builddir}/%{OrigName}-master/support/man/prefault.1 %{buildroot}/%{_mandir}/man1/
-cp -a %{_builddir}/%{OrigName}-master/support/config/prefault.conf %{buildroot}/%{_sysconfdir}/%{OrigName}/
-cp -a %{_builddir}/%{OrigName}-master/support/systemd/prefault.service %{buildroot}/%{_unitdir}/
+cp -a %{_builddir}/%{OrigName}-master/support/man/prefault.1 %{buildroot}/%{_mandir}/man1/prefault.1
+cp -a %{_builddir}/%{OrigName}-master/support/config/prefault.conf %{buildroot}/%{_sysconfdir}/%{OrigName}/prefault.conf
+cp -a %{_builddir}/%{OrigName}-master/support/systemd/prefault.service %{buildroot}/%{_unitdir}/prefault.service
 
 %postun
 %systemd_postun_with_restart %{OrigName}.service
