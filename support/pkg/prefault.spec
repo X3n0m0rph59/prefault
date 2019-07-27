@@ -32,8 +32,8 @@ cargo build --all --release --verbose
 %install
 %{__mkdir_p} %{buildroot}%{_mandir}/man1
 %{__mkdir_p} %{buildroot}%{_unitdir}/
-%{__mkdir_p} %{_sysconfdir}/%{OrigName}/%{OrigName}.conf
-%{__mkdir_p} %{_sysconfdir}/%{OrigName}/cache.d
+%{__mkdir_p} %{buildroot}%%{_sysconfdir}/%{OrigName}/%{OrigName}.conf
+%{__mkdir_p} %{buildroot}%%{_sysconfdir}/%{OrigName}/cache.d
 %{__mkdir_p} %{buildroot}%{_sharedstatedir}/%{OrigName}/
 %{__mkdir_p} %{buildroot}%{_sharedstatedir}/%{OrigName}/snapshots/
 #%{__mkdir_p} %{buildroot}%{_datarootdir}/bash-completion/completions/
