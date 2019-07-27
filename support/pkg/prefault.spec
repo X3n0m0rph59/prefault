@@ -8,7 +8,7 @@ URL:     https://x3n0m0rph59.github.io/prefault/
 License: GPLv3+
 
 # Source0: https://github.com/X3n0m0rph59/prefault.git
-Source0: https://github.com/X3n0m0rph59/%{OrigName}/-/archive/master/%{OrigName}-master.tar.gz
+Source0: https://github.com/X3n0m0rph59/%{OrigName}/archive/master/%{OrigName}-master.tar.gz
 
 BuildRoot: %{_tmppath}/%{name}-build
 
