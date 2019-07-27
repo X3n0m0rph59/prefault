@@ -34,12 +34,14 @@ use std::time::Duration;
 use structopt::StructOpt;
 use walkdir;
 
+mod filelist;
 mod memory;
 mod process;
 mod snapshot;
 mod util;
 
 // use crate::memory::*;
+use crate::filelist::*;
 use crate::process::*;
 use crate::snapshot::*;
 // use crate::util::*;
@@ -49,9 +51,9 @@ lazy_static! {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(about = "Pre-fault and optionally lock files into the kernel's page cache")]
+#[structopt(about = "Pre-fault and optionally lock files into the kernel's page cache memory")]
 pub struct Options {
-    #[structopt(short = "c", help = "Specify a configuration file")]
+    #[structopt(short = "c", help = "Specify an alternative configuration file")]
     config_file: Option<PathBuf>,
 
     #[structopt(
@@ -67,37 +69,36 @@ pub struct Options {
 
 #[derive(Debug, StructOpt)]
 enum Command {
-    #[structopt(name = "list", about = "List process snapshots")]
+    #[structopt(
+        name = "list",
+        about = "List available process snapshots and static file lists"
+    )]
     List {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
     },
 
     #[structopt(name = "enable", about = "Enable loading of process snapshots")]
     Enable {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
     },
 
     #[structopt(name = "disable", about = "Disable loading of process snapshots")]
     Disable {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
     },
 
     #[structopt(name = "show", about = "Show information about process snapshots")]
     Show {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
     },
 
-    #[structopt(
-        name = "snapshot",
-        about = "Take snapshots of running processes",
-        // help = "Examines running processes and saves their mapped files as snapshots"
-    )]
+    #[structopt(name = "snapshot", about = "Take snapshots of running processes")]
     Snapshot {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
 
         #[structopt(short = "p")]
@@ -109,7 +110,7 @@ enum Command {
         about = "Show which files of a process snapshot are resident in the page cache"
     )]
     Incore {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
 
         #[structopt(short = "p")]
@@ -124,13 +125,13 @@ enum Command {
 
     #[structopt(name = "remove", about = "Remove a process snapshot")]
     Remove {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
     },
 
     #[structopt(name = "cache", about = "Fault in files from process snapshots")]
     Cache {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
     },
 
@@ -139,7 +140,7 @@ enum Command {
         about = "Lock files from process snapshots into memory"
     )]
     Mlock {
-        #[structopt(short = "f")]
+        #[structopt(short = "f", long = "filter")]
         filter: Option<String>,
     },
 }
@@ -161,9 +162,46 @@ enum CommandError {
 
 fn do_list<T: AsRef<str>, P: AsRef<Path>>(
     filter: Option<T>,
+    static_filelist_dir: P,
     snapshot_dir: P,
     opts: &Options,
 ) -> Result<(), Error> {
+    if filter.is_none() {
+        println!("{}:", static_filelist_dir.as_ref().display());
+
+        for entry in walkdir::WalkDir::new(static_filelist_dir.as_ref()) {
+            let p = entry?;
+            if p.file_type().is_dir()
+                || p.path().extension().unwrap_or_else(|| OsStr::new("")) != "list"
+            {
+                continue;
+            }
+
+            let filelist =
+                FileList::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+
+            let mut total_size = 0;
+            for file in filelist.files.iter() {
+                match fs::metadata(&file) {
+                    Ok(metadata) => {
+                        let size = metadata.len();
+                        total_size += size;
+                    }
+
+                    Err(e) => eprintln!("{}: {}", &file.display(), e),
+                }
+            }
+
+            println!(
+                "{} ({} files, {})",
+                p.file_name().to_string_lossy(),
+                filelist.files.len(),
+                util::format_filesize(total_size)
+            );
+            println!();
+        }
+    }
+
     println!("{}:", snapshot_dir.as_ref().display());
 
     for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
@@ -266,6 +304,7 @@ fn do_show<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         println!("Total: {}", util::format_filesize(total_size));
+        println!();
     }
 
     Ok(())
@@ -366,10 +405,27 @@ fn do_remove<T: AsRef<str>, P: AsRef<Path>>(
 
 fn do_cache<T: AsRef<str>, P: AsRef<Path>>(
     filter: Option<T>,
+    static_filelist_dir: P,
     snapshot_dir: P,
     opts: &Options,
 ) -> Result<(), Error> {
-    // Err(CommandError::InvalidFilter)
+    for entry in walkdir::WalkDir::new(static_filelist_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir()
+            || p.path().extension().unwrap_or_else(|| OsStr::new("")) != "list"
+        {
+            continue;
+        }
+
+        let filelist =
+            FileList::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+
+        let files: Vec<PathBuf> = filelist.files.iter().cloned().collect();
+
+        memory::prime_dentry_cache(&files);
+        memory::prefault_file_mappings(&files)
+            .map_err(|e| CommandError::ExecutionError(e.into()))?;
+    }
 
     for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
         let p = entry?;
@@ -398,10 +454,27 @@ fn do_cache<T: AsRef<str>, P: AsRef<Path>>(
 
 fn do_mlock<T: AsRef<str>, P: AsRef<Path>>(
     filter: Option<T>,
+    static_filelist_dir: P,
     snapshot_dir: P,
     opts: &Options,
 ) -> Result<(), Error> {
-    // Err(CommandError::InvalidFilter)
+    for entry in walkdir::WalkDir::new(static_filelist_dir.as_ref()) {
+        let p = entry?;
+        if p.file_type().is_dir()
+            || p.path().extension().unwrap_or_else(|| OsStr::new("")) != "list"
+        {
+            continue;
+        }
+
+        let filelist =
+            FileList::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+
+        let files: Vec<PathBuf> = filelist.files.iter().cloned().collect();
+
+        // memory::prime_dentry_cache(&files);
+        memory::mlock_file_mappings(&files, opts)
+            .map_err(|e| CommandError::ExecutionError(e.into()))?;
+    }
 
     for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
         let p = entry?;
@@ -499,14 +572,16 @@ fn main() {
     let opts = Options::from_args();
     let mut settings = config::Config::default();
 
-    if opts.config_file.is_some() {
-        settings
-            .merge(config::File::new(
-                opts.config_file.clone().unwrap().to_str().unwrap(),
-                config::FileFormat::Toml,
-            ))
-            .expect("Could not read configuration file");
-    }
+    settings
+        .merge(config::File::new(
+            opts.config_file
+                .clone()
+                .unwrap_or_else(|| "/etc/prefault/prefault.conf".into())
+                .to_str()
+                .unwrap(),
+            config::FileFormat::Toml,
+        ))
+        .expect("Could not read configuration file");
 
     let home_dir =
         PathBuf::from(env::var("HOME").expect("Could not get value of HOME environment variable"));
@@ -525,9 +600,22 @@ fn main() {
     // println!("{}", &snapshot_dir.display());
     fs::create_dir_all(&snapshot_dir).expect("Error creating snapshot directory");
 
+    let mut static_filelist_dir = settings
+        .get::<PathBuf>("static_filelist_dir")
+        .unwrap_or_else(|_| PathBuf::from("/etc/prefault/cache.d"));
+
+    if static_filelist_dir.starts_with("~/") {
+        static_filelist_dir = home_dir.join(
+            static_filelist_dir
+                .strip_prefix(Path::new("~/"))
+                .expect("Error building static_filelist_dir"),
+        )
+    }
+
     match opts.cmd {
         Command::List { ref filter } => {
-            do_list(filter.as_ref(), snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
+            do_list(filter.as_ref(), &static_filelist_dir, &snapshot_dir, &opts)
+                .unwrap_or_else(|e| eprintln!("{}", e))
         }
 
         Command::Enable { ref filter } => do_set_state(filter.as_ref(), snapshot_dir, true, &opts)
@@ -560,11 +648,13 @@ fn main() {
         }
 
         Command::Cache { ref filter } => {
-            do_cache(filter.as_ref(), &snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
+            do_cache(filter.as_ref(), &static_filelist_dir, &snapshot_dir, &opts)
+                .unwrap_or_else(|e| eprintln!("{}", e))
         }
 
         Command::Mlock { ref filter } => {
-            do_mlock(filter.as_ref(), &snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e));
+            do_mlock(filter.as_ref(), &static_filelist_dir, &snapshot_dir, &opts)
+                .unwrap_or_else(|e| eprintln!("{}", e));
             println!("Going to sleep now");
 
             if unsafe { libc::isatty(0) == 1 } {

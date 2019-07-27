@@ -19,6 +19,7 @@
 */
 
 use libc;
+use rayon::prelude::*;
 use std::ffi;
 use std::fs::File;
 use std::io;
@@ -32,7 +33,7 @@ use crate::Options;
 const MAX_READAHEAD: usize = 10 * 1024 * 1024;
 
 pub fn prime_dentry_cache(m: &[PathBuf]) {
-    for mapping in m.iter() {
+    m.par_iter().for_each(|mapping| {
         println!("{}", mapping.display());
         match File::open(&mapping) {
             Ok(f) => {
@@ -45,15 +46,19 @@ pub fn prime_dentry_cache(m: &[PathBuf]) {
                         libc::perror(ffi::CString::new("fstat").unwrap().as_ptr());
                     }
                 }
+
+                unsafe {
+                    libc::close(fd);
+                }
             }
 
             Err(e) => println!("{}: {}", mapping.display(), e),
         }
-    }
+    })
 }
 
 pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
-    for mapping in m.iter() {
+    m.par_iter().for_each(|mapping| {
         println!("{}", mapping.display());
 
         match File::open(&mapping) {
@@ -98,17 +103,21 @@ pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
                         libc::perror(ffi::CString::new("madvise").unwrap().as_ptr());
                     }
                 }
+
+                unsafe {
+                    libc::close(fd);
+                }
             }
 
             Err(e) => println!("{}: {}", mapping.display(), e),
         }
-    }
+    });
 
     Ok(())
 }
 
 pub fn mlock_file_mappings(m: &[PathBuf], opts: &Options) -> io::Result<()> {
-    for mapping in m.iter() {
+    m.par_iter().for_each(|mapping| {
         if opts.verbosity > 1 {
             println!("{}", mapping.display());
         }
@@ -154,11 +163,15 @@ pub fn mlock_file_mappings(m: &[PathBuf], opts: &Options) -> io::Result<()> {
                         libc::perror(ffi::CString::new("mlock").unwrap().as_ptr());
                     }
                 }
+
+                unsafe {
+                    libc::close(fd);
+                }
             }
 
             Err(e) => println!("{}: {}", mapping.display(), e),
         }
-    }
+    });
 
     Ok(())
 }
@@ -228,6 +241,10 @@ pub fn print_fincore(m: &[PathBuf]) -> io::Result<()> {
                     mapping.display(),
                     util::format_filesize(stat.st_size as u64),
                 );
+
+                unsafe {
+                    libc::close(fd);
+                }
             }
 
             Err(e) => println!("{}: {}", mapping.display(), e),

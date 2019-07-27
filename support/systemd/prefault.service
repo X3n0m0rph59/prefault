@@ -3,7 +3,7 @@ Description=prefault files into memory
 
 [Service]
 Type=exec
-ExecStart=/usr/bin/prefault -c /etc/prefault/prefault.conf mlock
+ExecStart=/usr/bin/prefault mlock
 
 [Install]
 WantedBy=multi-user.target
