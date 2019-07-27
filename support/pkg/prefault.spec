@@ -38,10 +38,10 @@ cargo build --all --release --verbose
 %{__mkdir_p} %{buildroot}%{_sharedstatedir}/%{OrigName}/snapshots/
 #%{__mkdir_p} %{buildroot}%{_datarootdir}/bash-completion/completions/
 #%{__mkdir_p} %{buildroot}%{_datarootdir}/zsh/site-functions/
-cp -a %{_builddir}/%{OrigName}-%{version}/support/man/prefault.1 %{buildroot}/%{_mandir}/man1/
-cp -a %{_builddir}/%{OrigName}-%{version}/support/config/prefault.conf %{buildroot}/%{_sysconfdir}/%{OrigName}/
-cp -a %{_builddir}/%{OrigName}-%{version}/support/systemd/prefault.service %{buildroot}/%{_unitdir}/
-install -Dp -m 0755 %{_builddir}/%{OrigName}-%{version}/target/release/prefault %{buildroot}%{_bindir}/prefault
+cp -a %{_builddir}/%{name}-%{version}/support/man/prefault.1 %{buildroot}/%{_mandir}/man1/
+cp -a %{_builddir}/%{name}-%{version}/support/config/prefault.conf %{buildroot}/%{_sysconfdir}/%{OrigName}/
+cp -a %{_builddir}/%{name}-%{version}/support/systemd/prefault.service %{buildroot}/%{_unitdir}/
+install -Dp -m 0755 %{_builddir}/%{name}-%{version}/target/release/prefault %{buildroot}%{_bindir}/prefault
 
 %postun
 %systemd_postun_with_restart %{OrigName}.service
