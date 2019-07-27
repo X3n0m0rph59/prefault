@@ -1,7 +1,7 @@
 %global OrigName prefault
 
 Name:    prefault-git
-Version: 0.0.1
+Version: 0.0.2
 Release: 0%{?dist}
 Summary: prefault - A leightweight tool used to pre-fault pages from often used files into memory, ahead of time.
 URL:     https://x3n0m0rph59.github.io/prefault/
