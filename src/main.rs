@@ -512,7 +512,7 @@ fn main() {
         PathBuf::from(env::var("HOME").expect("Could not get value of HOME environment variable"));
     let mut snapshot_dir = settings
         .get::<PathBuf>("snapshot_dir")
-        .unwrap_or_else(|_| PathBuf::from("~/.local/share/prefault/snapshots"));
+        .unwrap_or_else(|_| PathBuf::from("/var/lib/prefault/snapshots"));
 
     if snapshot_dir.starts_with("~/") {
         snapshot_dir = home_dir.join(
@@ -565,15 +565,18 @@ fn main() {
 
         Command::Mlock { ref filter } => {
             do_mlock(filter.as_ref(), &snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e));
-
             println!("Going to sleep now");
 
-            loop {
-                thread::sleep(Duration::from_millis(2000));
+            if unsafe { libc::isatty(0) == 1 } {
+                loop {
+                    thread::sleep(Duration::from_millis(1000));
 
-                if !RUNNING.load(Ordering::SeqCst) {
-                    break;
+                    if !RUNNING.load(Ordering::SeqCst) {
+                        break;
+                    }
                 }
+            } else {
+                thread::sleep(Duration::from_millis(std::u64::MAX));
             }
 
             println!("Exiting");

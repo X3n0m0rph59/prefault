@@ -1,0 +1,9 @@
+[Unit]
+Description=prefault files into memory
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/prefault -c /etc/prefault/prefault.conf mlock
+
+[Install]
+WantedBy=multi-user.target
