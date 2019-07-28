@@ -4,6 +4,7 @@ Description=prefault files into memory
 [Service]
 Type=exec
 ExecStart=/usr/bin/prefault mlock
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=multi-user.target

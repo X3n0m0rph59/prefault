@@ -584,7 +584,7 @@ fn main() {
         .expect("Could not read configuration file");
 
     let home_dir =
-        PathBuf::from(env::var("HOME").expect("Could not get value of HOME environment variable"));
+        PathBuf::from(env::var("HOME").unwrap_or_else(|_| "/root".into()));
     let mut snapshot_dir = settings
         .get::<PathBuf>("snapshot_dir")
         .unwrap_or_else(|_| PathBuf::from("/var/lib/prefault/snapshots"));
