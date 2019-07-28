@@ -1,9 +1,9 @@
 [Unit]
-Description=prefault files into memory
+Description=prefault and lock files into memory
 
 [Service]
 Type=exec
-ExecStart=/usr/bin/prefault mlock
+ExecStart=/usr/bin/prefault -v mlock
 LimitMEMLOCK=infinity
 
 [Install]
