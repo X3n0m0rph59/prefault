@@ -59,12 +59,12 @@ impl FromStr for Mapping {
         let comp: Vec<&str> = s.split(' ').collect();
         let path = s[s.rfind(' ').unwrap() + 1..].to_owned();
 
-        let file: Option<PathBuf>;
+        let file: Option<PathBuf> =
         if !path.trim().is_empty() {
-            file = Some(PathBuf::from(&path));
+            Some(PathBuf::from(&path))
         } else {
-            file = None;
-        }
+            None
+        };
 
         let adresses: Vec<&str> = comp[0].split('-').collect();
         let start: usize = usize::from_str_radix(adresses[0], 16).unwrap();
@@ -109,7 +109,7 @@ impl Process {
                     let l = line.unwrap();
 
                     let mapping =
-                        Mapping::from_str(&l).map_err(|e| ProcessError::ParseMappingError(e))?;
+                        Mapping::from_str(&l).map_err(ProcessError::ParseMappingError)?;
                     maps.push(mapping);
                 }
 
@@ -132,7 +132,7 @@ impl Process {
 
                 comm = comm.trim().into();
 
-                let v: Vec<&str> = comm.split("\u{0}").collect();
+                let v: Vec<&str> = comm.split('\u{0}').collect();
 
                 Ok(v[0].to_owned())
             }
@@ -183,7 +183,7 @@ fn is_section_mapping<T: AsRef<Path>>(mapping: T) -> bool {
         return true;
     }
 
-    if mapping.trim().len() < 1 {
+    if mapping.trim().is_empty() {
         return true;
     }
 

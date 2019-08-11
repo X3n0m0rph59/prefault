@@ -178,7 +178,7 @@ fn do_list<T: AsRef<str>, P: AsRef<Path>>(
             }
 
             let filelist =
-                FileList::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+                FileList::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
             let mut total_size = 0;
             for file in filelist.files.iter() {
@@ -211,7 +211,7 @@ fn do_list<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         let mut total_size = 0;
         for mapping in snapshot.mappings.iter() {
@@ -252,7 +252,7 @@ fn do_set_state<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         let mut snapshot =
-            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         snapshot.set_enabled(enable);
         snapshot.save_to_file(snapshot_dir.as_ref())?;
@@ -280,7 +280,7 @@ fn do_show<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         println!(
             "{} ({} files) - Enabled: {}",
@@ -327,7 +327,7 @@ fn do_snapshot<T: AsRef<str>, P: AsRef<Path>>(
             Ok(snapshot) => {
                 let path = snapshot
                     .save_to_file(snapshot_dir.as_ref())
-                    .map_err(|e| CommandError::ExecutionError(e.into()))?;
+                    .map_err(CommandError::ExecutionError)?;
 
                 println!("Wrote {}", &path.display());
             }
@@ -418,7 +418,7 @@ fn do_cache<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         let filelist =
-            FileList::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+            FileList::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         let files: Vec<PathBuf> = filelist.files.iter().cloned().collect();
 
@@ -434,7 +434,7 @@ fn do_cache<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         if snapshot.enabled {
             if opts.verbosity > 0 {
@@ -467,7 +467,7 @@ fn do_mlock<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         let filelist =
-            FileList::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+            FileList::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         let files: Vec<PathBuf> = filelist.files.iter().cloned().collect();
 
@@ -483,7 +483,7 @@ fn do_mlock<T: AsRef<str>, P: AsRef<Path>>(
         }
 
         let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(|e| CommandError::ExecutionError(e))?;
+            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         if snapshot.enabled {
             if opts.verbosity > 0 {
@@ -512,7 +512,7 @@ fn match_filter<T: AsRef<str>, P: AsRef<Path>>(
     }
 
     let filter = filter.unwrap();
-    let params: Vec<&str> = filter.as_ref().split("=").collect();
+    let params: Vec<&str> = filter.as_ref().split('=').collect();
 
     if params.len() != 2 {
         panic!("WARNING: Invalid filter syntax: '{}'", &filter.as_ref());
@@ -523,27 +523,19 @@ fn match_filter<T: AsRef<str>, P: AsRef<Path>>(
         match snapshot::Snapshot::new_from_file(snapshot.as_ref()) {
             Ok(snapshot) => {
                 // TODO: Add support for regex
-                if snapshot.command.contains(params[1].trim()) {
-                    return true;
-                } else {
-                    return false;
-                }
+                snapshot.command.contains(params[1].trim())
             }
 
             Err(e) => {
                 eprintln!("WARNING: Error matching filter: {}", e);
-                return false;
+                false
             }
         }
     } else if params[0].starts_with("hash") {
         match snapshot::Snapshot::new_from_file(snapshot.as_ref()) {
             Ok(snapshot) => match params[1].parse::<u64>() {
                 Ok(hash) => {
-                    if snapshot.get_hash() == hash {
-                        return true;
-                    } else {
-                        return false;
-                    }
+                    snapshot.get_hash() == hash
                 }
 
                 Err(e) => {
@@ -554,11 +546,11 @@ fn match_filter<T: AsRef<str>, P: AsRef<Path>>(
 
             Err(e) => {
                 eprintln!("WARNING: Error matching filter: {}", e);
-                return false;
+                false
             }
         }
     } else {
-        return false;
+        false
     }
 }
 
@@ -639,7 +631,7 @@ fn main() {
             do_incore(filter.as_ref(), pid, &opts).unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Trace { command: _ } => {
+        Command::Trace { command: _, } => {
             println!("Trace subcommand is currently not implemented");
         }
 

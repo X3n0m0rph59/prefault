@@ -31,5 +31,5 @@ pub fn hash_string<T: Hash>(s: T) -> u64 {
 }
 
 pub fn format_filesize(size: u64) -> String {
-    format!("{}", convert(size as f64))
+    convert(size as f64)
 }

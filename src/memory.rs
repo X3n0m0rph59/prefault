@@ -43,7 +43,8 @@ pub fn prime_dentry_cache(m: &[PathBuf]) {
                 let result = unsafe { libc::fstat(fd, &mut stat) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("fstat").unwrap().as_ptr());
+                        let f = ffi::CString::new("fstat").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -68,7 +69,8 @@ pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
                 let result = unsafe { libc::readahead(fd, 0, MAX_READAHEAD) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("readahead").unwrap().as_ptr());
+                        let f = ffi::CString::new("readahead").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -76,7 +78,8 @@ pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
                 let result = unsafe { libc::fstat(fd, &mut stat) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("fstat").unwrap().as_ptr());
+                        let f = ffi::CString::new("fstat").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -90,9 +93,10 @@ pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
                         0,
                     )
                 };
-                if addr == ptr::null_mut() {
+                if addr.is_null() {
                     unsafe {
-                        libc::perror(ffi::CString::new("mmap").unwrap().as_ptr());
+                        let f = ffi::CString::new("mmap").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -100,7 +104,8 @@ pub fn prefault_file_mappings(m: &[PathBuf]) -> io::Result<()> {
                     unsafe { libc::madvise(addr, stat.st_size as usize, libc::MADV_WILLNEED) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("madvise").unwrap().as_ptr());
+                        let f = ffi::CString::new("madvise").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -129,7 +134,8 @@ pub fn mlock_file_mappings(m: &[PathBuf], opts: &Options) -> io::Result<()> {
                 let result = unsafe { libc::readahead(fd, 0, MAX_READAHEAD) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("readahead").unwrap().as_ptr());
+                        let f = ffi::CString::new("readahead").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -137,7 +143,8 @@ pub fn mlock_file_mappings(m: &[PathBuf], opts: &Options) -> io::Result<()> {
                 let result = unsafe { libc::fstat(fd, &mut stat) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("fstat").unwrap().as_ptr());
+                        let f = ffi::CString::new("fstat").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -151,16 +158,18 @@ pub fn mlock_file_mappings(m: &[PathBuf], opts: &Options) -> io::Result<()> {
                         0,
                     )
                 };
-                if addr == ptr::null_mut() {
+                if addr.is_null() {
                     unsafe {
-                        libc::perror(ffi::CString::new("mmap").unwrap().as_ptr());
+                        let f = ffi::CString::new("mmap").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
                 let result = unsafe { libc::mlock(addr, stat.st_size as usize) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("mlock").unwrap().as_ptr());
+                        let f = ffi::CString::new("mlock").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -186,7 +195,8 @@ pub fn print_fincore(m: &[PathBuf]) -> io::Result<()> {
                 let result = unsafe { libc::fstat(fd, &mut stat) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("fstat").unwrap().as_ptr());
+                        let f = ffi::CString::new("fstat").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -200,9 +210,10 @@ pub fn print_fincore(m: &[PathBuf]) -> io::Result<()> {
                         0,
                     )
                 };
-                if addr == ptr::null_mut() {
+                if addr.is_null() {
                     unsafe {
-                        libc::perror(ffi::CString::new("mmap").unwrap().as_ptr());
+                        let f = ffi::CString::new("mmap").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
@@ -211,7 +222,8 @@ pub fn print_fincore(m: &[PathBuf]) -> io::Result<()> {
                     unsafe { libc::mincore(addr, stat.st_size as usize, pages.as_mut_ptr()) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("mincore").unwrap().as_ptr());
+                        let f = ffi::CString::new("mincore").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 } else {
                     unsafe {
@@ -222,7 +234,8 @@ pub fn print_fincore(m: &[PathBuf]) -> io::Result<()> {
                 let result = unsafe { libc::munmap(addr, stat.st_size as usize) };
                 if result != 0 {
                     unsafe {
-                        libc::perror(ffi::CString::new("munmap").unwrap().as_ptr());
+                        let f = ffi::CString::new("munmap").unwrap();
+                        libc::perror(f.as_ptr());
                     }
                 }
 
