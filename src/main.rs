@@ -210,8 +210,7 @@ fn do_list<T: AsRef<str>, P: AsRef<Path>>(
             continue;
         }
 
-        let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
+        let snapshot = Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         let mut total_size = 0;
         for mapping in snapshot.mappings.iter() {
@@ -279,8 +278,7 @@ fn do_show<T: AsRef<str>, P: AsRef<Path>>(
             continue;
         }
 
-        let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
+        let snapshot = Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         println!(
             "{} ({} files) - Enabled: {}",
@@ -417,8 +415,7 @@ fn do_cache<T: AsRef<str>, P: AsRef<Path>>(
             continue;
         }
 
-        let filelist =
-            FileList::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
+        let filelist = FileList::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         let files: Vec<PathBuf> = filelist.files.iter().cloned().collect();
 
@@ -433,8 +430,7 @@ fn do_cache<T: AsRef<str>, P: AsRef<Path>>(
             continue;
         }
 
-        let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
+        let snapshot = Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         if snapshot.enabled {
             if opts.verbosity > 0 {
@@ -466,8 +462,7 @@ fn do_mlock<T: AsRef<str>, P: AsRef<Path>>(
             continue;
         }
 
-        let filelist =
-            FileList::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
+        let filelist = FileList::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         let files: Vec<PathBuf> = filelist.files.iter().cloned().collect();
 
@@ -482,8 +477,7 @@ fn do_mlock<T: AsRef<str>, P: AsRef<Path>>(
             continue;
         }
 
-        let snapshot =
-            Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
+        let snapshot = Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError)?;
 
         if snapshot.enabled {
             if opts.verbosity > 0 {
@@ -534,9 +528,7 @@ fn match_filter<T: AsRef<str>, P: AsRef<Path>>(
     } else if params[0].starts_with("hash") {
         match snapshot::Snapshot::new_from_file(snapshot.as_ref()) {
             Ok(snapshot) => match params[1].parse::<u64>() {
-                Ok(hash) => {
-                    snapshot.get_hash() == hash
-                }
+                Ok(hash) => snapshot.get_hash() == hash,
 
                 Err(e) => {
                     panic!("Invalid hash value specified: {}", e);
@@ -575,8 +567,7 @@ fn main() {
         ))
         .expect("Could not read configuration file");
 
-    let home_dir =
-        PathBuf::from(env::var("HOME").unwrap_or_else(|_| "/root".into()));
+    let home_dir = PathBuf::from(env::var("HOME").unwrap_or_else(|_| "/root".into()));
     let mut snapshot_dir = settings
         .get::<PathBuf>("snapshot_dir")
         .unwrap_or_else(|_| PathBuf::from("/var/lib/prefault/snapshots"));
@@ -631,7 +622,7 @@ fn main() {
             do_incore(filter.as_ref(), pid, &opts).unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Trace { command: _, } => {
+        Command::Trace { command: _ } => {
             println!("Trace subcommand is currently not implemented");
         }
 
