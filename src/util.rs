@@ -30,6 +30,6 @@ pub fn hash_string<T: Hash>(s: T) -> u64 {
     hasher.finish()
 }
 
-pub fn format_filesize(size: u64) -> String {
+pub fn format_file_size(size: u64) -> String {
     convert(size as f64)
 }

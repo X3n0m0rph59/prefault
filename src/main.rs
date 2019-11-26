@@ -196,7 +196,7 @@ fn do_list<T: AsRef<str>, P: AsRef<Path>>(
                 "{} ({} files, {})",
                 p.file_name().to_string_lossy(),
                 filelist.files.len(),
-                util::format_filesize(total_size)
+                util::format_file_size(total_size)
             );
             println!();
         }
@@ -229,7 +229,7 @@ fn do_list<T: AsRef<str>, P: AsRef<Path>>(
             snapshot.get_hash(),
             &snapshot.command,
             snapshot.mappings.len(),
-            util::format_filesize(total_size)
+            util::format_file_size(total_size)
         );
     }
 
@@ -294,14 +294,18 @@ fn do_show<T: AsRef<str>, P: AsRef<Path>>(
                     let size = metadata.len();
                     total_size += size;
 
-                    println!("\t{} ({})", &mapping.display(), util::format_filesize(size));
+                    println!(
+                        "\t{} ({})",
+                        &mapping.display(),
+                        util::format_file_size(size)
+                    );
                 }
 
                 Err(e) => eprintln!("{}: {}", &mapping.display(), e),
             }
         }
 
-        println!("Total: {}", util::format_filesize(total_size));
+        println!("Total: {}", util::format_file_size(total_size));
         println!();
     }
 
@@ -596,46 +600,50 @@ fn main() {
     }
 
     match opts.cmd {
-        Command::List { ref filter } => {
+        Command::List { ref filter, .. } => {
             do_list(filter.as_ref(), &static_filelist_dir, &snapshot_dir, &opts)
                 .unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Enable { ref filter } => do_set_state(filter.as_ref(), snapshot_dir, true, &opts)
-            .unwrap_or_else(|e| eprintln!("{}", e)),
+        Command::Enable { ref filter, .. } => {
+            do_set_state(filter.as_ref(), snapshot_dir, true, &opts)
+                .unwrap_or_else(|e| eprintln!("{}", e))
+        }
 
-        Command::Disable { ref filter } => {
+        Command::Disable { ref filter, .. } => {
             do_set_state(filter.as_ref(), snapshot_dir, false, &opts)
                 .unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Show { ref filter } => {
+        Command::Show { ref filter, .. } => {
             do_show(filter.as_ref(), snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Snapshot { ref filter, pid } => {
+        Command::Snapshot {
+            ref filter, pid, ..
+        } => {
             do_snapshot(filter.as_ref(), pid, snapshot_dir, &opts)
                 .unwrap_or_else(|e| eprintln!("{}", e));
         }
 
-        Command::Incore { ref filter, pid } => {
-            do_incore(filter.as_ref(), pid, &opts).unwrap_or_else(|e| eprintln!("{}", e))
-        }
+        Command::Incore {
+            ref filter, pid, ..
+        } => do_incore(filter.as_ref(), pid, &opts).unwrap_or_else(|e| eprintln!("{}", e)),
 
-        Command::Trace { command: _ } => {
+        Command::Trace { command: _, .. } => {
             println!("Trace subcommand is currently not implemented");
         }
 
-        Command::Remove { ref filter } => {
+        Command::Remove { ref filter, .. } => {
             do_remove(filter.as_ref(), snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Cache { ref filter } => {
+        Command::Cache { ref filter, .. } => {
             do_cache(filter.as_ref(), &static_filelist_dir, &snapshot_dir, &opts)
                 .unwrap_or_else(|e| eprintln!("{}", e))
         }
 
-        Command::Mlock { ref filter } => {
+        Command::Mlock { ref filter, .. } => {
             do_mlock(filter.as_ref(), &static_filelist_dir, &snapshot_dir, &opts)
                 .unwrap_or_else(|e| eprintln!("{}", e));
             println!("Going to sleep now");

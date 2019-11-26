@@ -252,7 +252,7 @@ pub fn print_fincore(m: &[PathBuf]) -> io::Result<()> {
                     fincore_percentage,
                     page_cnt,
                     mapping.display(),
-                    util::format_filesize(stat.st_size as u64),
+                    util::format_file_size(stat.st_size as u64),
                 );
 
                 unsafe {
