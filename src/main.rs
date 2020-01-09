@@ -1,6 +1,6 @@
 /*
     prefault
-    Copyright (C) 2019 the prefault developers
+    Copyright (c) 2019-2020 the prefault developers
 
     This file is part of prefault.
 
@@ -117,11 +117,11 @@ enum Command {
         pid: Option<libc::pid_t>,
     },
 
-    #[structopt(name = "trace", about = "Trace a process and record accessed files")]
-    Trace {
-        #[structopt(short = "c")]
-        command: Option<String>,
-    },
+    //#[structopt(name = "trace", about = "Trace a process and record accessed files")]
+    //Trace {
+    //#[structopt(short = "c")]
+    //command: Option<String>,
+    //},
 
     #[structopt(name = "remove", about = "Remove a process snapshot")]
     Remove {
@@ -316,68 +316,116 @@ fn do_snapshot<T: AsRef<str>, P: AsRef<Path>>(
     filter: Option<T>,
     pid: Option<libc::pid_t>,
     snapshot_dir: P,
-    _opts: &Options,
+    opts: &Options,
 ) -> Result<(), CommandError> {
     if filter.is_none() && pid.is_none() {
         return Err(CommandError::InvalidParamaters(
-            "Neither filter nor pid specified".into(),
+            "Neither filter nor PID specified".into(),
         ));
     }
 
-    match Process::new(pid.unwrap()) {
-        Ok(proc) => match Snapshot::new_from_process(&proc) {
-            Ok(snapshot) => {
-                let path = snapshot
-                    .save_to_file(snapshot_dir.as_ref())
-                    .map_err(CommandError::ExecutionError)?;
+    if let Some(pid) = pid {
+        match Process::new(pid) {
+            Ok(proc) => match Snapshot::new_from_process(&proc) {
+                Ok(snapshot) => {
+                    let path = snapshot
+                        .save_to_file(snapshot_dir.as_ref())
+                        .map_err(CommandError::ExecutionError)?;
 
-                println!("Wrote {}", &path.display());
+                    println!("Wrote {}", &path.display());
+                }
+
+                Err(e) => return Err(CommandError::ExecutionError(e)),
+            },
+
+            Err(e) => {
+                return Err(CommandError::Process {
+                    msg: format!("{}", e),
+                })
+            }
+        }
+    } else if let Some(filter) = filter {
+        for process in Process::enumerate().map_err(CommandError::ExecutionError)? {
+            if !match_filter_process(Some(filter.as_ref()), &process, &opts) {
+                continue;
             }
 
-            Err(e) => return Err(CommandError::ExecutionError(e)),
-        },
+            match Snapshot::new_from_process(&process).map_err(CommandError::ExecutionError) {
+                Ok(snapshot) => {
+                    let path = snapshot
+                        .save_to_file(snapshot_dir.as_ref())
+                        .map_err(CommandError::ExecutionError)?;
 
-        Err(e) => {
-            return Err(CommandError::Process {
-                msg: format!("{}", e),
-            })
+                    println!("Wrote {}", &path.display());
+                }
+
+                Err(e) => return Err(CommandError::ExecutionError(e.into())),
+            }
         }
+    } else {
+        return Err(CommandError::InvalidParamaters(
+            "Neither filter nor PID specified".into(),
+        ));
     }
 
     Ok(())
 }
 
-fn do_incore<T: AsRef<str>>(
+fn do_incore<T: AsRef<str>, P: AsRef<Path>>(
     filter: Option<T>,
     pid: Option<libc::pid_t>,
-    _opts: &Options,
+    snapshot_dir: P,
+    opts: &Options,
 ) -> Result<(), Error> {
     if filter.is_none() && pid.is_none() {
         return Err(
-            CommandError::InvalidParamaters("Neither filter nor pid specified".into()).into(),
+            CommandError::InvalidParamaters("Neither filter nor PID specified".into()).into(),
         );
     }
 
-    match Process::new(pid.unwrap()) {
-        Ok(proc) => {
-            println!("{} mappings:", proc.get_command()?);
-            match Snapshot::new_from_process(&proc) {
+    if let Some(pid) = pid {
+        match Process::new(pid) {
+            Ok(proc) => {
+                println!("{} mappings:", proc.get_command()?);
+                match Snapshot::new_from_process(&proc) {
+                    Ok(snapshot) => {
+                        let paths: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
+                        memory::print_fincore(&paths)
+                            .map_err(|e| CommandError::ExecutionError(e.into()))?;
+                    }
+
+                    Err(e) => return Err(CommandError::ExecutionError(e).into()),
+                }
+            }
+
+            Err(e) => {
+                return Err(CommandError::Process {
+                    msg: format!("{}", e),
+                }
+                .into())
+            }
+        }
+    } else if let Some(filter) = filter {
+        for entry in walkdir::WalkDir::new(snapshot_dir.as_ref()) {
+            let p = entry?;
+            if p.file_type().is_dir() || !match_filter(Some(filter.as_ref()), &p.path(), &opts) {
+                continue;
+            }
+
+            match Snapshot::new_from_file(p.path()).map_err(CommandError::ExecutionError) {
                 Ok(snapshot) => {
                     let paths: Vec<PathBuf> = snapshot.mappings.iter().cloned().collect();
                     memory::print_fincore(&paths)
                         .map_err(|e| CommandError::ExecutionError(e.into()))?;
                 }
 
-                Err(e) => return Err(CommandError::ExecutionError(e).into()),
+                Err(e) => return Err(CommandError::ExecutionError(e.into()).into()),
             }
         }
-
-        Err(e) => {
-            return Err(CommandError::Process {
-                msg: format!("{}", e),
-            }
-            .into())
-        }
+    } else {
+        return Err(
+            CommandError::InvalidParamaters("Neither filter nor PID specified".into()).into(),
+        );
     }
 
     Ok(())
@@ -550,6 +598,27 @@ fn match_filter<T: AsRef<str>, P: AsRef<Path>>(
     }
 }
 
+fn match_filter_process<T: AsRef<str>>(
+    filter: Option<T>,
+    process: &Process,
+    _opts: &Options,
+) -> bool {
+    // no filter matches all
+    if filter.is_none() {
+        return true;
+    }
+
+    let filter = filter.unwrap();
+    let params: Vec<&str> = filter.as_ref().split('=').collect();
+
+    if params.len() != 2 {
+        panic!("WARNING: Invalid filter syntax: '{}'", &filter.as_ref());
+        // return false;
+    }
+
+    params[0].starts_with("comm") && process.get_command().unwrap().starts_with(params[1].trim())
+}
+
 fn main() {
     let r = RUNNING.clone();
     ctrlc::set_handler(move || {
@@ -628,11 +697,12 @@ fn main() {
 
         Command::Incore {
             ref filter, pid, ..
-        } => do_incore(filter.as_ref(), pid, &opts).unwrap_or_else(|e| eprintln!("{}", e)),
+        } => do_incore(filter.as_ref(), pid, snapshot_dir, &opts)
+            .unwrap_or_else(|e| eprintln!("{}", e)),
 
-        Command::Trace { command: _, .. } => {
-            println!("Trace subcommand is currently not implemented");
-        }
+        //Command::Trace { command: _, .. } => {
+        //println!("Trace subcommand is currently not implemented");
+        //}
 
         Command::Remove { ref filter, .. } => {
             do_remove(filter.as_ref(), snapshot_dir, &opts).unwrap_or_else(|e| eprintln!("{}", e))

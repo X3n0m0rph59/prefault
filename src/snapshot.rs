@@ -1,6 +1,6 @@
 /*
     prefault
-    Copyright (C) 2019 the prefault developers
+    Copyright (c) 2019-2020 the prefault developers
 
     This file is part of prefault.
 

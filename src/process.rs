@@ -1,6 +1,6 @@
 /*
     prefault
-    Copyright (C) 2019 the prefault developers
+    Copyright (c) 2019-2020 the prefault developers
 
     This file is part of prefault.
 
@@ -21,7 +21,7 @@
 use failure::{Error, Fail};
 use libc;
 use std::collections::HashSet;
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -33,6 +33,9 @@ pub enum ProcessError {
 
     #[fail(display = "Could not parse a mapping")]
     ParseMappingError(#[fail(cause)] Error),
+
+    #[fail(display = "Could not enumerate processes")]
+    EnumProcessesError(#[fail(cause)] Error),
 }
 
 // #[derive(Fail, Debug)]
@@ -59,8 +62,7 @@ impl FromStr for Mapping {
         let comp: Vec<&str> = s.split(' ').collect();
         let path = s[s.rfind(' ').unwrap() + 1..].to_owned();
 
-        let file: Option<PathBuf> =
-        if !path.trim().is_empty() {
+        let file: Option<PathBuf> = if !path.trim().is_empty() {
             Some(PathBuf::from(&path))
         } else {
             None
@@ -90,6 +92,49 @@ impl FromStr for Mapping {
     }
 }
 
+pub struct ProcessIterator {
+    cur: std::fs::ReadDir,
+}
+
+impl std::iter::Iterator for ProcessIterator {
+    type Item = Process;
+
+    fn next(&mut self) -> Option<Process> {
+        // find the next valid `proc` directory entry
+        let path = 'LOOP: loop {
+            let entry = self.cur.next();
+            if entry.is_none() {
+                break 'LOOP None; // maybe end of `ReadDir` iterator
+            }
+
+            let entry = entry.unwrap().unwrap();
+            let path = entry.path();
+
+            let path_str = path.to_string_lossy();
+            if path_str == "/proc/self"
+                || path_str == "/proc/thread-self"
+                || path_str == ".."
+                || path_str == "."
+                || !Path::join(&path, "comm").exists()
+            {
+                continue; // we found a known `bad` directory, skip it
+            } else {
+                break 'LOOP Some(path); // we found the next valid task directory
+            }
+        };
+
+        if let Some(path) = path {
+            let path = path.to_string_lossy();
+            let pid_str = path.trim_matches(|c| !char::is_numeric(c));
+            let pid: libc::pid_t = pid_str.parse::<libc::pid_t>().unwrap();
+
+            Process::new(pid).ok()
+        } else {
+            None // end of iteration
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Process {
     pub pid: libc::pid_t,
@@ -108,8 +153,7 @@ impl Process {
                 for line in f.lines() {
                     let l = line.unwrap();
 
-                    let mapping =
-                        Mapping::from_str(&l).map_err(ProcessError::ParseMappingError)?;
+                    let mapping = Mapping::from_str(&l).map_err(ProcessError::ParseMappingError)?;
                     maps.push(mapping);
                 }
 
@@ -118,6 +162,12 @@ impl Process {
 
             Err(e) => Err(ProcessError::ReadError(e).into()),
         }
+    }
+
+    pub fn enumerate() -> Result<ProcessIterator, Error> {
+        Ok(read_dir("/proc/")
+            .and_then(|entry| Ok(ProcessIterator { cur: entry }))
+            .map_err(|e| ProcessError::EnumProcessesError(e.into()))?)
     }
 
     pub fn get_command(&self) -> Result<String, Error> {
