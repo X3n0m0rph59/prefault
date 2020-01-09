@@ -2,14 +2,13 @@
 
 Name:    prefault-git
 Version: 0.0.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: prefault - A lightweight tool used to pre-fault pages from often used files into memory, ahead of time.
 URL:     https://x3n0m0rph59.github.io/prefault/
 License: GPLv3+
 
 # Source0: https://github.com/X3n0m0rph59/prefault.git
 Source0: https://codeload.github.com/X3n0m0rph59/%{OrigName}/tar.gz/master
-# Source0: source.tar.gz
 
 BuildRoot: %{_tmppath}/%{name}-build
 
@@ -62,6 +61,9 @@ cp -a %{_builddir}/%{OrigName}-master/support/systemd/prefault.service %{buildro
 #%{_datarootdir}/zsh/site-functions/_prefault
 
 %changelog
+* Thu Jan 09 2020 X3n0m0rph59 <x3n0m0rph59@gmail.com> - 0.0.4-2
+- rebuilt
+
 * Thu Jan 09 2020 X3n0m0rph59 <x3n0m0rph59@gmail.com> - 0.0.4-1
 - rebuilt
 

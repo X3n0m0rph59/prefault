@@ -1,5 +1,5 @@
 .\" Man page for prefault
-.TH "prefault" "1" "25. Jul 2019" "X3n0m0rph59" "prefault documentation"
+.TH "prefault" "1" "09. Jan 2020" "X3n0m0rph59" "prefault documentation"
 .SH "NAME  "
 prefault
 .SH "SYNOPSIS  "
@@ -18,7 +18,7 @@ prefault [FLAGS] [OPTIONS] \fI<SUBCOMMAND>\fR
 -c \fI<config_file>\fR Specify a configuration file
 
 .SH "DESCRIPTION  "
-Pre-fault and optionally lock files into the kernel's page cache to improve 
+Pre-fault and optionally lock files into the kernel's page cache to improve
 application startup times and reduce desktop lagging.
 .SH "SUBCOMMANDS  "
 .SS
@@ -38,7 +38,7 @@ application startup times and reduce desktop lagging.
 
 .SS
 \fBhelp\fR        Prints this message or the help of the given subcommand(s)
-        
+
         Prints usage information.
 
 .SS
@@ -63,18 +63,13 @@ application startup times and reduce desktop lagging.
 
 .SS
 \fBshow\fR        Show information about process snapshots
-        
+
         May be used to dump a listing of files in a process snapshot.
 
 .SS
 \fBsnapshot\fR    Take snapshots of running processes
-        
+
         Records a list of mapped files for later prefaulting.
-
-.SS
-\fBtrace\fR       Trace a process and record accessed files
-
-        This is currently not implemented.
 
 .SH "BUGS  "
 Currently no known bugs.
